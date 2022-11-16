@@ -1,0 +1,21 @@
+---
+title: "ben_rmd"
+author: "Ben Aoki-Sherwood"
+date: "2022-11-16"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(runjags)
+library(tidyverse)
+library(bayesplot)
+library(coda)
+library(ProbBayes)
+set.seed(987654321)
+```
+
+```{r}
+sports <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2022/2022-03-29/sports.csv')
+```
+
