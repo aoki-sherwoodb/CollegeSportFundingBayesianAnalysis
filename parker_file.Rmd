@@ -1,0 +1,19 @@
+---
+title: "parker_file"
+author: "Parker Johnson"
+date: "2022-11-16"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+
+```{r}
+summary(cars)
+```
+
+
