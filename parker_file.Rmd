@@ -1,0 +1,93 @@
+---
+title: "parker_file"
+author: "Parker Johnson"
+date: "2022-11-16"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(collapse = TRUE, eval = TRUE, 
+                      prompt = FALSE, 
+                      message = FALSE, warning = FALSE)
+library(ggplot2)
+library(dplyr)
+library(ProbBayes)
+library(runjags)
+library(coda)
+library(bayesplot)
+library(tidybayes)
+library(stringr)
+```
+
+## R Markdown
+
+
+```{r}
+sports <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2022/2022-03-29/sports.csv')
+
+testing <- sports %>%
+  filter(str_detect(classification_name, "NCAA") == TRUE) %>%
+  mutate(Division = str_extract(classification_name, "Division I{1,3}")) %>%
+  filter(year == 2019) %>%
+  filter(is.na(rev_men) == FALSE & is.na(rev_women) == FALSE) %>%
+  mutate(ratio_partic_men = partic_men / (partic_men + partic_women)) %>%
+  select(institution_name, city_txt, state_cd, Division, ef_total_count, 
+         partic_men, partic_women, ratio_partic_men, rev_men, rev_women, 
+         total_rev_menwomen, sports)
+
+#sum(is.na(testing$partic_coed_women) == FALSE) It's 3, same for men. Unimportant
+```
+
+```{r}
+#This is a Hierarchical linear regression, so not multiple regression
+hlm_string <-"model {
+## sampling
+for (i in 1:N){
+   y[i] ~ dnorm(mu[i], resid_precision)
+   mu[i] <- beta0 + beta1 * basement[i] + u[county[i]]
+}
+## random effects
+for (j in 1:J){
+   u[j] ~ dnorm(0, county_precision)
+}
+## fixed effects
+beta0 ~ dnorm(0, 0.5)
+beta1 ~ dnorm(0, 0.5)
+## variance components
+resid_precision ~ dunif(0, 100)
+resid_variance <- sqrt(pow(resid_precision, -1))
+county_precision ~ dunif(0, 100)
+county_variance <- sqrt(pow(county_precision, -1))
+}
+"
+
+the_data <- list(y = radon$log.radon, 
+                 county = radon$county, 
+                 basement = radon$basement,
+                 N = nrow(radon), 
+                 J = length(unique(radon$county))
+)
+
+initsfunction <- function(chain){
+  .RNG.seed <- c(1,2)[chain]
+  .RNG.name <- c("base::Super-Duper",
+                 "base::Wichmann-Hill")[chain]
+  return(list(.RNG.seed=.RNG.seed,
+              .RNG.name=.RNG.name))
+}
+
+posterior <- run.jags(
+  hlm_string,
+  n.chains = 1,
+  data = the_data,
+  monitor = c("beta0", "beta1", "u", "resid_variance", "county_variance"),
+  adapt = 1000,
+  burnin = 5000,
+  sample = 5000,
+  inits = initsfunction,
+  silent.jags = TRUE
+)
+```
+
+
+
