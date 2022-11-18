@@ -19,3 +19,32 @@ set.seed(987654321)
 sports <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2022/2022-03-29/sports.csv')
 ```
 
+```{r}
+sports2019 <- sports %>% 
+  filter(
+    year == 2019 & # choose one year to focus on
+    str_detect(classification_name, "NCAA") == TRUE & # include only NCAA teams
+    sum_partic_men > 0 & sum_partic_women > 0) %>% # include only sports with both men and women
+  mutate(division = str_extract(classification_name, "NCAA Division I{1,3}"),
+         gender_ratio = sum_partic_men / sum_partic_women) 
+```
+
+```{r}
+# EDA
+ggplot(data = sports2019) + geom_boxplot(aes(x = gender_ratio, y = division))
+ggplot(data = sports2019) + 
+  geom_histogram(aes(x = log(total_rev_menwomen), fill = division))
+sports2019 %>%
+  group_by(division) %>%
+  summarize(med_ratio = median(gender_ratio),
+            med_rev = median(total_rev_menwomen, na.rm = TRUE))
+```
+
+```{r}
+modelString <- "
+for (i in 1:N) {
+
+}
+"
+```
+
