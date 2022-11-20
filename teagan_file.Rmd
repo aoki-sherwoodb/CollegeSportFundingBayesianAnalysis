@@ -15,12 +15,19 @@ library(coda)
 library(bayesplot)
 library(tidybayes)
 library(stringr)
+library(rjags)
 ```
 
 ```{r}
 tuesdata <- tidytuesdayR::tt_load('2022-03-29')
 sports <- tuesdata$sports
 ```
+
+```{r}
+sports %>% 
+  summarize(min = minimum())
+```
+
 
 ```{r}
 testing <- sports %>%
@@ -34,6 +41,46 @@ testing <- sports %>%
          total_rev_menwomen, sports) %>%
   mutate(div1_indicator = as.numeric(Division == "Division I"), div2_indicator = as.numeric(Division == "Division II"))
 ```
+
+```{r}
+View(testing %>%
+  slice_max(total_rev_menwomen, n=3))
+
+View(testing %>%
+  slice_min(total_rev_menwomen, n=3))
+```
+
+```{r}
+View(testing %>%
+  filter(Division == "Division III") %>%
+  slice_max(total_rev_menwomen, n=3))
+
+View(testing %>%
+  group_by(Division) %>%
+  mutate(avg_rev = mean(total_rev_menwomen)) %>%
+  slice_max(total_rev_menwomen, n=5) %>%
+  summarize(norm_diff = (total_rev_menwomen - avg_rev) / avg_rev, institution_name, avg_rev) %>%
+  ungroup() %>%
+  slice_max(norm_diff, n=10))
+```
+
+```{r}
+View(testing %>%
+  group_by(Division) %>%
+  mutate(avg_rev = mean(total_rev_menwomen)) %>%
+  slice_min(total_rev_menwomen, n=5) %>%
+  summarize(norm_diff = (avg_rev - total_rev_menwomen) / avg_rev, institution_name, avg_rev, total_rev_menwomen) %>%
+  ungroup() %>%
+  slice_max(norm_diff, n=7))
+```
+
+
+```{r}
+testing %>%
+  filter(Division == "Division III") %>%
+  unique()
+```
+
 
 
 ```{r}
@@ -60,7 +107,7 @@ hlm_string <-"model {
 ## sampling
 for (i in 1:N){
    y[i] ~ dnorm(mu[i], sigma)
-   mu[i] <- beta0 + beta1 * div1_indicator[i] + beta2 * div2_indicator[i] + beta3 * ratio_partic_men + u[school[i]]
+   mu[i] <- beta0 + beta1 * div1_indicator[i] + beta2 * div2_indicator[i] + beta3 * ratio_partic_men[i] + u[school[i]]
 }
 ## random effects
 for (j in 1:J){
@@ -79,11 +126,13 @@ tau_variance <- sqrt(pow(tau, -1))
 }
 "
 
-the_data <- list(y = radon$log.radon, 
-                 county = radon$county, 
-                 basement = radon$basement,
-                 N = nrow(radon), 
-                 J = length(unique(radon$county))
+the_data <- list(y = testing$total_rev_menwomen, 
+                 school = testing$institution_name, 
+                 div1_indicator = testing$div1_indicator,
+                 div2_indicator = testing$div2_indicator,
+                 ratio_partic_men = testing$ratio_partic_men,
+                 N = nrow(testing), 
+                 J = length(unique(testing$institution_name))
 )
 
 initsfunction <- function(chain){
@@ -98,7 +147,7 @@ posterior <- run.jags(
   hlm_string,
   n.chains = 1,
   data = the_data,
-  monitor = c("beta0", "beta1", "u", "resid_variance", "county_variance"),
+  monitor = c("beta0", "beta1", "beta2", "beta3", "u", "sigma_variance", "tau_variance"),
   adapt = 1000,
   burnin = 5000,
   sample = 5000,
