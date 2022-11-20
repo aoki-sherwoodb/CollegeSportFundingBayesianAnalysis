@@ -38,8 +38,11 @@ sports2019 <- sports %>%
 ```
 
 ```{r}
-# EDA
+# assess correlation between division and gender ratio
 ggplot(data = sports2019) + geom_boxplot(aes(x = gender_ratio, y = division))
+# assess linearity between division and log revenue: we should see a multiplicative change in
+# revenue between divisions if this relationship is linear, and indeed we do based on the 
+# summary stats calculated in this chunk.
 ggplot(data = sports2019) + 
   geom_histogram(aes(x = log(total_rev_menwomen), fill = division))
 sports2019 %>%
@@ -130,11 +133,23 @@ MCMC diagnostics on convergence and sampler efficiency:
 
 ```{r}
 mcmc_trace(posterior$mcmc, pars = c("beta0", "beta1", "beta2", "beta3", "resid_variance", "school_variance"))
+```
+
+```{r}
 mcmc_acf(posterior$mcmc, pars = c("beta0", "beta1", "beta2", "beta3", "resid_variance", "school_variance"))
+```
+
+```{r}
+# check that all effective sample sizes are > 2000:
+effectiveSize(posterior$mcmc)
 effectiveSize(posterior$mcmc[[1]][,"resid_variance"])
 effectiveSize(posterior$mcmc[[1]][,"school_variance"])
-gelman.diag(posterior$mcmc[,"beta0"])
-geweke.diag(posterior$mcmc)
+
+# convergence diagnostics indicate convergence for all non-random effect parameters!
+# random effect u_j's also converged, but are not displayed because there are so many
+gelman.diag(posterior$mcmc)$psrf[c("beta0", "beta1", "beta2", "beta3", "resid_variance", "school_variance"),]
+geweke <- geweke.diag(posterior$mcmc)
+geweke[[1]]$z[c("beta0", "beta1", "beta2", "beta3", "resid_variance", "school_variance")]
 ```
 
 Posterior predictive check:
@@ -151,16 +166,19 @@ Analysis: slope parameters
 
 ```{r}
 post_df <- tidy_draws(posterior) %>% 
-  mutate(across(everything(), .fns = exp))
-pis <- post_df %>%
+  mutate(across(everything(), .fns = exp)) # exponentiate slopes with log response to get
+pis <- post_df %>%                         # multiplicative factors for unlogged response
   select(beta0, beta1, beta2, beta3) %>%
   summarize(across(everything(), .fns = quantile, probs = c(0.025, 0.975)))
-head(pis)
+pis %>% knitr::kable()
 ```
 
 Analysis: random school effects
 
 ```{r}
+# create a dataframe with each school in our data set and that school's random effect,
+# using the median of the posterior for u_j as a point estimate and exponentiating
+# to get a multiplicative revenue factor for each school
 school_code_map <- sports2019 %>% select(c(institution_name, school_code))
 med_us <- post_df %>%
   select(contains("u")) %>%
@@ -169,9 +187,29 @@ med_us <- post_df %>%
   pivot_longer(cols = everything(), names_to = "school_code", values_to = "random_effect") %>%
   mutate(school_code = as.numeric(school_code)) %>% 
   left_join(school_code_map, join_by = school_code) %>%
-  unique()
+  unique() %>% 
+  mutate(random_effect = exp(random_effect))
+``` 
+
+```{r}
+# 
 ggplot(data=med_us) + geom_histogram(aes(x = random_effect))
-top5_schools = med_us %>% slice_max(random_effect, n = 5)
-bottom5_schools = med_us %>% slice_min(random_effect, n = 5)
+top3_schools = med_us %>% slice_max(random_effect, n = 3)
+bottom3_schools = med_us %>% slice_min(random_effect, n = 3)
+extremes = full_join(top3_schools, bottom3_schools)
+```
+
+```{r}
+library(ggrepel)
+ggplot(data=med_us, aes(x = random_effect, y = 0, label = institution_name)) +
+  geom_point() +
+  geom_label_repel(data = extremes,
+                   box.padding   = 0.35, 
+                   point.padding = 1,
+                   segment.color = 'grey50',
+                   max.overlaps = 100) +
+  theme(axis.text.y = element_blank(), axis.ticks.y = element_blank(), axis.title.y = element_blank()) +
+  labs(x = "School Random Effect Values",
+       title = "Top 3 and Bottom 3 Schools by Random Effect Value")
 ```
 
